@@ -1,4 +1,4 @@
 GameInfo
 {
-    AddEventHandlers = "lcs_EventHandler"
+    AddEventHandlers = "LCS_EventHandler"
 }
