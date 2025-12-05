@@ -4,6 +4,11 @@ class LCS_EventHandler : EventHandler
     ui Array<LCS_Weapon> currentWeapons;
     ui Vector2 MousePosition;
 
+    ui bool mouseClicked;
+    ui Vector2 slotSelected;
+    ui bool hasSlotSelected;
+    ui String selectedWeaponString;
+
     /**
     * Processes keybinds
     */
@@ -23,7 +28,7 @@ class LCS_EventHandler : EventHandler
             UpdateCurrentWeaponsArray();
             SaveCurrentWeaponsToDisk();
 
-            SlotSelected(slot);
+            PlayerSlotNumberSelected(slot);
         }
         
         // Player tries to edit
@@ -35,6 +40,9 @@ class LCS_EventHandler : EventHandler
             // Allow the play scope to know that the player is editing
             if (isEditing)
             {
+                slotSelected = (-1, -1);
+                hasSlotSelected = false;
+                selectedWeaponString = "";
                 SendNetworkEvent("LCS_Editing");
             }
             else
@@ -65,6 +73,17 @@ class LCS_EventHandler : EventHandler
         if (event.MouseX != 0 && event.MouseY != 0)
         {
             MousePosition = (event.MouseX, event.MouseY);
+        }
+
+        // Mouse left click
+        if (event.Type == event.Type_LButtonDown && mouseClicked == false)
+        {
+            //Console.printf("Mouse clicked!");
+            mouseClicked = true;
+        }
+        else
+        {
+            mouseClicked = false;
         }
 
         /*
@@ -219,7 +238,7 @@ class LCS_EventHandler : EventHandler
     *   Translates a slot number into a weapon to switch to
     *   The weapon is sent over the network to every client
     */
-    ui void SlotSelected(int slot)
+    ui void PlayerSlotNumberSelected(int slot)
     {
         // The player's current held weapon
         Weapon heldWeapon = players[Consoleplayer].ReadyWeapon;

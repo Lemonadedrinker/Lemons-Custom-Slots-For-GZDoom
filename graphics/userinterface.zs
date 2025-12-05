@@ -37,9 +37,18 @@ extend class LCS_EventHandler
         //Screen.DrawThickLine(MousePosition.X, MousePosition.Y, 10, 10, HudScale.X, Color(255, 0, 255));
         //DrawBox((MousePosition.X, MousePosition.Y), boxWidth, boxHeight, bevel);
 
+        // Draw the empty frame
         DrawFrame();
+
+        // Calculate which slot should have been clicked on
         mouseSlot = CalculateSlotUnderMouse();
+
+        // Calculate if it was a valid click
+        if (mouseClicked && !hasSlotSelected) CalculateMouseClick(mouseSlot.X, mouseSlot.Y);
+        
         DrawWeaponBoxes();
+
+
     }
 
     private ui void DrawBox(Vector2 origin, int width, int height, int bevel, bool highlighted = false)
@@ -125,7 +134,11 @@ extend class LCS_EventHandler
         int yPosition = (MousePosition.Y - (boxHeight / 2)) / boxHeight;
 
         // Remove if y position is higher than it should be
-        if (MousePosition.Y <= boxHeight / 2) yPosition = -1;
+        if (MousePosition.Y <= boxHeight / 2)
+        {
+            xPosition = -1;
+            yPosition = -1;
+        }
 
         //Console.printf("%i, %i", xPosition, yPosition);
 
@@ -134,9 +147,16 @@ extend class LCS_EventHandler
 
     private ui void DrawWeaponBoxes()
     {
+        // Draw the selected weapon last so it's on top
+        Vector2 weaponBoxOnCursorPosition = (-1, -1);
+        int selectedWeaponIndex = -1;
+
+        LCS_Weapon selectedWeaponObject;
+
         for (int slot = 0; slot < 10; slot++)
         {
             int row = 0;
+            int weaponsInSlot = 0;
             int currentSlot = (slot == 9) ? 0 : slot + 1;
 
             /*
@@ -162,6 +182,7 @@ extend class LCS_EventHandler
             savedWeaponString.Split(savedWeaponList, ",");
 
             // Check each saved weapon in the comma separated list
+            
             for (int savedWeapon = 0; savedWeapon < savedWeaponList.Size(); savedWeapon++)
             {
                 // See if the saved weapon is a currently held weapon
@@ -169,14 +190,45 @@ extend class LCS_EventHandler
                 {
                     if (savedWeaponList[savedWeapon] == currentWeapons[i].weapon.GetClassName())
                     {
-                        // Highlight the slot if the cursor is underneath it
-                        bool highlighted = (slot == mouseSlot.X && row == mouseSlot.Y);
+                        // If the mouse is hovering over this slot, then skip the row
+                        // This gives the effect of creating a gap to place the new weapon
+                        if (hasSlotSelected && mouseSlot == (slot, weaponsInSlot) && slotSelected != mouseSlot)
+                        {
+                            row++;
+                        }
 
-                        DrawWeaponBox(slot, row, currentWeapons[i], highlighted);
+                        // Highlight the slot if the cursor is underneath it
+                        bool isHoveredOver = (slot == mouseSlot.X && row == mouseSlot.Y);
+
+                        // Check if the slot was clicked on
+                        if (selectedWeaponString == savedWeaponList[savedWeapon])
+                        {
+                            //Console.printf("Slot selected");
+                            //DrawWeaponBoxOnCursor(currentWeapons[i], true);
+                            // Save the position so that we can draw it last
+                            weaponBoxOnCursorPosition = (slot, row);
+                            selectedWeaponObject = currentWeapons[i];
+                            //weaponsInSlot--;
+                            // Add a gap for the selected weapon only for the slot
+                            if (slot == mouseSlot.X && row == mouseSlot.Y) row++;
+                            continue;
+                        }
+                        else
+                        {
+                            DrawWeaponBox(slot, row, currentWeapons[i], isHoveredOver);
+                        }
+
                         row++;
+                        weaponsInSlot++;
                     }
                 }
             }
+        }
+
+        // Draw the weapon on the cursor if there is one
+        if (hasSlotSelected) 
+        {
+            DrawWeaponBoxOnCursor(selectedWeaponObject, true);
         }
     }
 
@@ -198,7 +250,7 @@ extend class LCS_EventHandler
             currentWeapon.weapon.FindState("Spawn", true).GetSpriteTexture(0, 0, (0, 0)),
             true,
             (boxWidth * slot) + (boxWidth / 2),
-            (boxHeight * (row + 1.2)),
+            (boxHeight * (row + 1)),
             DTA_ScaleX, scalingFactor * 1,
             DTA_ScaleY, scalingFactor * 1
         );
@@ -213,5 +265,164 @@ extend class LCS_EventHandler
             DTA_ScaleY, scalingFactor / 2,
             DTA_TextLen, 11
         );
+    }
+
+    private ui void DrawWeaponBoxOnCursor(LCS_Weapon currentWeapon, bool highlighted = true)
+    {
+        // Draw the box first,
+        // then draw the weapon sprite,
+        // finally, draw the text over the sprite
+        DrawBox(
+            (MousePosition.X,
+            MousePosition.Y),
+            boxWidth,
+            boxHeight,
+            bevel,
+            highlighted
+        );
+
+        Screen.DrawTexture(
+            currentWeapon.weapon.FindState("Spawn", true).GetSpriteTexture(0, 0, (0, 0)),
+            true,
+            MousePosition.X,
+            MousePosition.Y,
+            DTA_ScaleX, scalingFactor * 1,
+            DTA_ScaleY, scalingFactor * 1
+        );
+
+        Screen.DrawText(
+            OriginalSmallFont, 
+            fontColor, 
+            MousePosition.X - (boxWidth / 2) + (2 * bevel), 
+            MousePosition.Y + (.3) * boxHeight, 
+            currentWeapon.weapon.GetClassName(),
+            DTA_ScaleX, scalingFactor / 2,
+            DTA_ScaleY, scalingFactor / 2,
+            DTA_TextLen, 11
+        );
+    }
+
+    private ui void CalculateMouseClick(int slotNumber, int slotRow)
+    {
+        int oldCurrentSlot = (slotNumber == 9) ? 0 : slotNumber + 1;
+
+        // This is the list of weapons for the slots
+        CVar oldCVar = CVar.GetCvar("LCS_Slot"..oldCurrentSlot, players[ConsolePlayer]);
+
+        // Here the list is split by comma into the weaponCVars
+        Array<String> oldSlotWeaponCVars;
+        oldCVar.GetString().Split(oldSlotWeaponCVars, ",");
+
+        // Need currentWeapons as a string
+        Array<String> currentWeaponStrings;
+        for (int i = 0; i < currentWeapons.Size(); i++)
+        {
+            //Console.printf("Current weapons: "..currentWeapons[i].weapon.GetClassName());
+            currentWeaponStrings.push(currentWeapons[i].weapon.GetClassName());
+        }
+
+        // Separate out only the weapons the player currently has
+        Array<String> oldSlotCurrentWeapons;
+
+        for (int i = 0; i < oldSlotWeaponCVars.Size(); i++)
+        {
+            if (currentWeaponStrings.Find(oldSlotWeaponCVars[i]) != currentWeaponStrings.Size())
+            {
+                //Console.printf("Old weapon:" .. oldSlotWeaponCVars[i]);
+                oldSlotCurrentWeapons.push(oldSlotWeaponCVars[i]);
+            }
+        }
+
+        //Console.printf("Column size: %i", oldSlotCurrentWeapons.Size());
+
+        if (slotRow < oldSlotCurrentWeapons.Size())
+        {
+            slotSelected = (slotNumber, slotRow);
+            hasSlotSelected = true;
+            selectedWeaponString = oldSlotCurrentWeapons[slotRow];
+            Console.printf(" selectedWeaponString: "..selectedWeaponString);
+        }
+        else
+        {
+            slotSelected = (-1, -1);
+            hasSlotSelected = false;
+            selectedWeaponString = "";
+        }
+    }
+
+    /***
+    *   Inserts the weapon into the slot, pushing the others around
+    */
+    private ui bool ReplaceSlot(int slotNumber, int slotRow)
+    {
+        int newCurrentSlot = (mouseSlot.X == 9) ? 0 : mouseSlot.X + 1;
+
+        // This is the list of weapons for the slots
+        CVar newCVar = CVar.GetCvar("LCS_Slot"..newcurrentSlot, players[ConsolePlayer]);
+
+        // Here the list is split by comma into the weaponCVars
+        Array<String> newSlotWeaponCVars;
+        newCVar.GetString().Split(newSlotWeaponCVars, ",");
+
+        // Need currentWeapons as a string
+        Array<String> currentWeaponStrings;
+        for (int i = 0; i < currentWeapons.Size(); i++)
+        {
+            //Console.printf("Current weapons: "..currentWeapons[i].weapon.GetClassName());
+            currentWeaponStrings.push(currentWeapons[i].weapon.GetClassName());
+        }
+
+        // Separate out only the weapons the player currently has
+        Array<String> newSlotCurrentWeapons;
+
+        for (int i = 0; i < newSlotWeaponCVars.Size(); i++)
+        {
+            if (currentWeaponStrings.Find(newSlotWeaponCVars[i]) != currentWeaponStrings.Size())
+            {
+                Console.printf("New weapon:" .. newSlotWeaponCVars[i]);
+                newSlotCurrentWeapons.push(newSlotWeaponCVars[i]);
+            }
+        }
+
+        // Find the index of the soon to be next weapon
+        int index;
+        if (slotRow > newSlotCurrentWeapons.Size())
+        {
+            index = newSlotCurrentWeapons.Size();
+        }
+        else
+        {
+            index = slotRow;
+        }
+
+        Console.printf(" Index: %i, slotrow: %i", index, slotRow);
+
+        return (slotRow != slotSelected.X);
+
+        /*
+
+        // Take the weapon, add it to the end of the new cvar
+        int rowIndex;
+
+        if (slotRow < 0) rowIndex = 0;
+        else if (slotRow >= oldSlotCurrentWeapons.Size()) rowIndex = oldSlotCurrentWeapons.Size() - 2;
+        else rowIndex = slotRow;
+
+        String weaponToAdd = oldSlotCurrentWeapons[rowIndex];
+        //newCVar.SetString(""..newCVar.GetString()..weaponToAdd..",");
+
+        // Delete from the old one
+        String oldString = "";
+        
+        //Console.printf(oldSlotWeaponCVars[oldSlotWeaponCVars.Find(weaponToAdd..",") - 1]);
+
+        /*
+        oldSlotWeaponCVars.Delete(oldSlotWeaponCVars.Find(weaponToAdd..","));
+        for (int i = 0; i < oldSlotWeaponCVars.Size(); i++)
+        {
+            oldString = oldString..oldSlotWeaponCvars[i];
+        }
+        //oldCVar.SetString(oldString);
+        */
     }
 }
